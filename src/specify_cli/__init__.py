@@ -28,7 +28,6 @@ import sys
 import zipfile
 import tempfile
 import shutil
-import json
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -60,7 +59,7 @@ AI_CHOICES = {
     "cursor": "Cursor"
 }
 # Add script type choices
-SCRIPT_TYPE_CHOICES = {"sh": "POSIX Shell (bash/zsh)", "ps": "PowerShell"}
+SCRIPT_TYPE_CHOICES = {"sh": "POSIX Shell (bash/zsh)", "ps": "PowerShell", "nu": "Nushell"}
 
 # Claude CLI local installation path after migrate-installer
 CLAUDE_LOCAL_PATH = Path.home() / ".claude" / "local" / "claude"
@@ -416,14 +415,69 @@ def init_git_repo(project_path: Path, quiet: bool = False) -> bool:
         os.chdir(original_cwd)
 
 
-def download_template_from_github(ai_assistant: str, download_dir: Path, *, script_type: str = "sh", verbose: bool = True, show_progress: bool = True, client: httpx.Client = None, debug: bool = False) -> Tuple[Path, dict]:
-    repo_owner = "github"
-    repo_name = "spec-kit"
+def download_template_from_github(
+    ai_assistant: str,
+    download_dir: Path,
+    *,
+    script_type: str = "sh",
+    repo_owner: str | None = None,
+    repo_name: str = "spec-kit",
+    verbose: bool = True,
+    show_progress: bool = True,
+    client: httpx.Client = None,
+    debug: bool = False,
+) -> Tuple[Path, dict]:
+    """Download template ZIP for the given assistant from a GitHub release.
+
+    Repo owner resolution order (if ``repo_owner`` not passed):
+      1. GitHub CLI: ``gh repo view --json nameWithOwner`` (extract owner)
+      2. Environment variable ``SPEC_KIT_REPO_OWNER``
+      3. Fallback default: ``github``
+
+    This enables contributors to publish releases to personal forks for testing
+    without changing code. The resolved owner and source are included in the
+    returned metadata under keys ``repo_owner`` and ``owner_source``.
+    """
+    resolved_owner_source: str | None = None
+    if repo_owner:
+        resolved_owner_source = "argument"
+    else:
+        # Attempt GitHub CLI detection
+        try:
+            gh_path = shutil.which("gh")
+            if gh_path:
+                gh_proc = subprocess.run(
+                    [gh_path, "repo", "view", "--json", "nameWithOwner"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                import json as _json
+                data = _json.loads(gh_proc.stdout or "{}")
+                name_with_owner = data.get("nameWithOwner") or ""
+                if "/" in name_with_owner:
+                    repo_owner = name_with_owner.split("/", 1)[0]
+                    resolved_owner_source = "gh-cli"
+        except Exception:
+            pass  # ignore any gh detection errors
+    if not repo_owner:
+        env_owner = os.environ.get("SPEC_KIT_REPO_OWNER")
+        if env_owner:
+            repo_owner = env_owner.strip()
+            resolved_owner_source = "env"
+    if not repo_owner:
+        repo_owner = "github"
+        if not resolved_owner_source:
+            resolved_owner_source = "default"
+
     if client is None:
         client = httpx.Client(verify=ssl_context)
     
     if verbose:
         console.print("[cyan]Fetching latest release information...[/cyan]")
+        if debug:
+            console.print(f"[dim]Using repo owner: {repo_owner} (source: {resolved_owner_source})[/dim]")
     api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
     
     try:
@@ -439,7 +493,7 @@ def download_template_from_github(ai_assistant: str, download_dir: Path, *, scri
         except ValueError as je:
             raise RuntimeError(f"Failed to parse release JSON: {je}\nRaw (truncated 400): {response.text[:400]}")
     except Exception as e:
-        console.print(f"[red]Error fetching release information[/red]")
+        console.print("[red]Error fetching release information[/red]")
         console.print(Panel(str(e), title="Fetch Error", border_style="red"))
         raise typer.Exit(1)
     
@@ -470,7 +524,7 @@ def download_template_from_github(ai_assistant: str, download_dir: Path, *, scri
     # Download the file
     zip_path = download_dir / filename
     if verbose:
-        console.print(f"[cyan]Downloading template...[/cyan]")
+        console.print("[cyan]Downloading template...[/cyan]")
     
     try:
         with client.stream("GET", download_url, timeout=60, follow_redirects=True) as response:
@@ -500,7 +554,7 @@ def download_template_from_github(ai_assistant: str, download_dir: Path, *, scri
                         for chunk in response.iter_bytes(chunk_size=8192):
                             f.write(chunk)
     except Exception as e:
-        console.print(f"[red]Error downloading template[/red]")
+        console.print("[red]Error downloading template[/red]")
         detail = str(e)
         if zip_path.exists():
             zip_path.unlink()
@@ -512,12 +566,25 @@ def download_template_from_github(ai_assistant: str, download_dir: Path, *, scri
         "filename": filename,
         "size": file_size,
         "release": release_data["tag_name"],
-        "asset_url": download_url
+        "asset_url": download_url,
+        "repo_owner": repo_owner,
+        "owner_source": resolved_owner_source,
     }
     return zip_path, metadata
 
 
-def download_and_extract_template(project_path: Path, ai_assistant: str, script_type: str, is_current_dir: bool = False, *, verbose: bool = True, tracker: StepTracker | None = None, client: httpx.Client = None, debug: bool = False) -> Path:
+def download_and_extract_template(
+    project_path: Path,
+    ai_assistant: str,
+    script_type: str,
+    repo_owner: str | None = None,
+    is_current_dir: bool = False,
+    *,
+    verbose: bool = True,
+    tracker: StepTracker | None = None,
+    client: httpx.Client = None,
+    debug: bool = False,
+) -> Path:
     """Download the latest release and extract it to create a new project.
     Returns project_path. Uses tracker if provided (with keys: fetch, download, extract, cleanup)
     """
@@ -531,10 +598,11 @@ def download_and_extract_template(project_path: Path, ai_assistant: str, script_
             ai_assistant,
             current_dir,
             script_type=script_type,
+            repo_owner=repo_owner,
             verbose=verbose and tracker is None,
             show_progress=(tracker is None),
             client=client,
-            debug=debug
+            debug=debug,
         )
         if tracker:
             tracker.complete("fetch", f"release {meta['release']} ({meta['size']:,} bytes)")
@@ -590,7 +658,7 @@ def download_and_extract_template(project_path: Path, ai_assistant: str, script_
                             tracker.add("flatten", "Flatten nested directory")
                             tracker.complete("flatten")
                         elif verbose:
-                            console.print(f"[cyan]Found nested directory structure[/cyan]")
+                            console.print("[cyan]Found nested directory structure[/cyan]")
                     
                     # Copy contents to current directory
                     for item in source_dir.iterdir():
@@ -613,7 +681,7 @@ def download_and_extract_template(project_path: Path, ai_assistant: str, script_
                                 console.print(f"[yellow]Overwriting file:[/yellow] {item.name}")
                             shutil.copy2(item, dest_path)
                     if verbose and not tracker:
-                        console.print(f"[cyan]Template files merged into current directory[/cyan]")
+                        console.print("[cyan]Template files merged into current directory[/cyan]")
             else:
                 # Extract directly to project directory (original behavior)
                 zip_ref.extractall(project_path)
@@ -643,7 +711,7 @@ def download_and_extract_template(project_path: Path, ai_assistant: str, script_
                         tracker.add("flatten", "Flatten nested directory")
                         tracker.complete("flatten")
                     elif verbose:
-                        console.print(f"[cyan]Flattened nested directory structure[/cyan]")
+                        console.print("[cyan]Flattened nested directory structure[/cyan]")
                     
     except Exception as e:
         if tracker:
@@ -675,37 +743,43 @@ def download_and_extract_template(project_path: Path, ai_assistant: str, script_
 
 
 def ensure_executable_scripts(project_path: Path, tracker: StepTracker | None = None) -> None:
-    """Ensure POSIX .sh scripts under .specify/scripts (recursively) have execute bits (no-op on Windows)."""
+    """Ensure scripts under .specify/scripts (recursively) have execute bits for supported shells."""
     if os.name == "nt":
-        return  # Windows: skip silently
+        return
     scripts_root = project_path / ".specify" / "scripts"
     if not scripts_root.is_dir():
         return
+    patterns = ["*.sh", "*.nu"]
     failures: list[str] = []
     updated = 0
-    for script in scripts_root.rglob("*.sh"):
-        try:
-            if script.is_symlink() or not script.is_file():
-                continue
+    for pattern in patterns:
+        for script in scripts_root.rglob(pattern):
             try:
-                with script.open("rb") as f:
-                    if f.read(2) != b"#!":
-                        continue
-            except Exception:
-                continue
-            st = script.stat(); mode = st.st_mode
-            if mode & 0o111:
-                continue
-            new_mode = mode
-            if mode & 0o400: new_mode |= 0o100
-            if mode & 0o040: new_mode |= 0o010
-            if mode & 0o004: new_mode |= 0o001
-            if not (new_mode & 0o100):
-                new_mode |= 0o100
-            os.chmod(script, new_mode)
-            updated += 1
-        except Exception as e:
-            failures.append(f"{script.relative_to(scripts_root)}: {e}")
+                if script.is_symlink() or not script.is_file():
+                    continue
+                try:
+                    with script.open("rb") as f:
+                        if f.read(2) != b"#!":
+                            continue
+                except Exception:
+                    continue
+                st = script.stat()
+                mode = st.st_mode
+                if mode & 0o111:
+                    continue
+                new_mode = mode
+                if mode & 0o400:
+                    new_mode |= 0o100
+                if mode & 0o040:
+                    new_mode |= 0o010
+                if mode & 0o004:
+                    new_mode |= 0o001
+                if not (new_mode & 0o100):
+                    new_mode |= 0o100
+                os.chmod(script, new_mode)
+                updated += 1
+            except Exception as e:
+                failures.append(f"{script.relative_to(scripts_root)}: {e}")
     if tracker:
         detail = f"{updated} updated" + (f", {len(failures)} failed" if failures else "")
         tracker.add("chmod", "Set script permissions recursively")
@@ -723,7 +797,8 @@ def ensure_executable_scripts(project_path: Path, tracker: StepTracker | None = 
 def init(
     project_name: str = typer.Argument(None, help="Name for your new project directory (optional if using --here)"),
     ai_assistant: str = typer.Option(None, "--ai", help="AI assistant to use: claude, gemini, copilot, or cursor"),
-    script_type: str = typer.Option(None, "--script", help="Script type to use: sh or ps"),
+    script_type: str = typer.Option(None, "--script", help="Script type to use: sh, ps or nu"),
+    repo_owner: str = typer.Option(None, "--repo-owner", help="Override GitHub repo owner for template releases (default auto-detect via gh or SPEC_KIT_REPO_OWNER)"),
     ignore_agent_tools: bool = typer.Option(False, "--ignore-agent-tools", help="Skip checks for AI agent tools like Claude Code"),
     no_git: bool = typer.Option(False, "--no-git", help="Skip git repository initialization"),
     here: bool = typer.Option(False, "--here", help="Initialize project in the current directory instead of creating a new one"),
@@ -838,13 +913,15 @@ def init(
             raise typer.Exit(1)
         selected_script = script_type
     else:
-        # Auto-detect default
         default_script = "ps" if os.name == "nt" else "sh"
-        # Provide interactive selection similar to AI if stdin is a TTY
         if sys.stdin.isatty():
             selected_script = select_with_arrows(SCRIPT_TYPE_CHOICES, "Choose script type (or press Enter)", default_script)
         else:
             selected_script = default_script
+
+    # Warn if nushell chosen but not installed
+    if selected_script == "nu" and not shutil.which("nu"):
+        console.print("[yellow]Warning:[/yellow] Nushell executable 'nu' not found in PATH. Nushell scripts will still be generated but may not run until Nushell is installed (https://www.nushell.sh/).")
     
     console.print(f"[cyan]Selected AI assistant:[/cyan] {selected_ai}")
     console.print(f"[cyan]Selected script type:[/cyan] {selected_script}")
@@ -883,7 +960,17 @@ def init(
             local_ssl_context = ssl_context if verify else False
             local_client = httpx.Client(verify=local_ssl_context)
 
-            download_and_extract_template(project_path, selected_ai, selected_script, here, verbose=False, tracker=tracker, client=local_client, debug=debug)
+            download_and_extract_template(
+                project_path,
+                selected_ai,
+                selected_script,
+                repo_owner=repo_owner,
+                is_current_dir=here,
+                verbose=False,
+                tracker=tracker,
+                client=local_client,
+                debug=debug,
+            )
 
             # Ensure scripts are executable (POSIX)
             ensure_executable_scripts(project_path, tracker=tracker)
@@ -986,7 +1073,7 @@ def check():
     code_ok = check_tool_for_tracker("code", "https://code.visualstudio.com/", tracker)
     if not code_ok:
         code_ok = check_tool_for_tracker("code-insiders", "https://code.visualstudio.com/insiders/", tracker)
-    cursor_ok = check_tool_for_tracker("cursor-agent", "https://cursor.sh/", tracker)
+    check_tool_for_tracker("cursor-agent", "https://cursor.sh/", tracker)
     
     # Render the final tree
     console.print(tracker.render())

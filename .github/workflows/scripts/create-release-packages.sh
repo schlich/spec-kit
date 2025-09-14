@@ -7,11 +7,12 @@ set -euo pipefail
 #   Version argument should include leading 'v'.
 #   Optionally set AGENTS and/or SCRIPTS env vars to limit what gets built.
 #     AGENTS  : space or comma separated subset of: claude gemini copilot (default: all)
-#     SCRIPTS : space or comma separated subset of: sh ps (default: both)
+#     SCRIPTS : space or comma separated subset of: sh ps nu (default: all three once nu supported)
 #   Examples:
 #     AGENTS=claude SCRIPTS=sh $0 v0.2.0
 #     AGENTS="copilot,gemini" $0 v0.2.0
 #     SCRIPTS=ps $0 v0.2.0
+#     SCRIPTS=nu $0 v0.2.0
 
 if [[ $# -ne 1 ]]; then
   echo "Usage: $0 <version-with-v-prefix>" >&2
@@ -106,6 +107,11 @@ build_variant() {
         # Copy any script files that aren't in variant-specific directories
         find scripts -maxdepth 1 -type f -exec cp {} "$SPEC_DIR/scripts/" \; 2>/dev/null || true
         ;;
+      nu)
+        [[ -d scripts/nushell ]] && { cp -r scripts/nushell "$SPEC_DIR/scripts/"; echo "Copied scripts/nushell -> .specify/scripts"; }
+        # Copy any script files that aren't in variant-specific directories
+        find scripts -maxdepth 1 -type f -exec cp {} "$SPEC_DIR/scripts/" \; 2>/dev/null || true
+        ;;
     esac
   fi
   
@@ -117,7 +123,7 @@ build_variant() {
     variant_line=$(printf '%s\n' "$plan_norm" | grep -E "<!--[[:space:]]*VARIANT:$script" | head -1 | sed -E "s/.*VARIANT:$script[[:space:]]+//; s/-->.*//; s/^[[:space:]]+//; s/[[:space:]]+$//")
     if [[ -n $variant_line ]]; then
       tmp_file=$(mktemp)
-      sed "s|VARIANT-INJECT|${variant_line}|" "$plan_tpl" | tr -d '\r' | sed "s|__AGENT__|${agent}|g" | sed '/<!--[[:space:]]*VARIANT:sh/d' | sed '/<!--[[:space:]]*VARIANT:ps/d' > "$tmp_file" && mv "$tmp_file" "$plan_tpl"
+      sed "s|VARIANT-INJECT|${variant_line}|" "$plan_tpl" | tr -d '\r' | sed "s|__AGENT__|${agent}|g" | sed '/<!--[[:space:]]*VARIANT:sh/d' | sed '/<!--[[:space:]]*VARIANT:ps/d' | sed '/<!--[[:space:]]*VARIANT:nu/d' > "$tmp_file" && mv "$tmp_file" "$plan_tpl"
     else
       echo "Warning: no plan-template variant for $script (pattern not matched)" >&2
     fi
@@ -141,9 +147,23 @@ build_variant() {
   echo "Created spec-kit-template-${agent}-${script}-${NEW_VERSION}.zip"
 }
 
+# Basic integrity checks before building variants (ensure variant-specific dirs exist)
+preflight_check() {
+  local missing=0
+  # For sh variant ensure scripts/bash exists
+  [[ -d scripts/bash ]] || { echo "Warning: scripts/bash missing (sh variant)" >&2; }
+  # For ps variant ensure scripts/powershell exists
+  [[ -d scripts/powershell ]] || { echo "Warning: scripts/powershell missing (ps variant)" >&2; }
+  # For nu variant ensure scripts/nushell exists
+  [[ -d scripts/nushell ]] || { echo "Warning: scripts/nushell missing (nu variant)" >&2; missing=1; }
+  return $missing
+}
+
+preflight_check || echo "One or more variant directories missing; corresponding archives may be incomplete." >&2
+
 # Determine agent list
 ALL_AGENTS=(claude gemini copilot cursor)
-ALL_SCRIPTS=(sh ps)
+ALL_SCRIPTS=(sh ps nu)
 
 norm_list() {
   # convert comma+space separated -> space separated unique while preserving order of first occurrence
@@ -152,16 +172,21 @@ norm_list() {
 
 validate_subset() {
   local type=$1; shift; local -n allowed=$1; shift; local items=($@)
-  local ok=1
+  local ok=0  # 0 means success so far, will set to 1 if any invalid item
   for it in "${items[@]}"; do
     local found=0
     for a in "${allowed[@]}"; do [[ $it == $a ]] && { found=1; break; }; done
     if [[ $found -eq 0 ]]; then
       echo "Error: unknown $type '$it' (allowed: ${allowed[*]})" >&2
-      ok=0
+      ok=1
     fi
   done
-  return $ok
+  # Return 0 on success (no errors), 1 on failure (any invalid item)
+  if [[ $ok -eq 0 ]]; then
+    return 0
+  else
+    return 1
+  fi
 }
 
 if [[ -n ${AGENTS:-} ]]; then

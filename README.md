@@ -168,6 +168,47 @@ Our research and experimentation focus on:
 - [Python 3.11+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/downloads)
 
+### Optional Shell Environments
+
+In addition to the provided Bash (`scripts/bash`) and PowerShell (`scripts/powershell`) automation scripts, this repository now includes Nushell equivalents in `scripts/nushell`. If you use [Nushell](https://www.nushell.sh/), you can run the same feature workflow commands:
+
+```bash
+# Create a new feature (generates numbered branch & spec skeleton)
+scripts/nushell/create-new-feature.nu "Add photo album sharing"
+
+# Set up implementation plan template
+scripts/nushell/setup-plan.nu
+
+# Show derived feature paths
+scripts/nushell/get-feature-paths.nu
+
+# Validate prerequisites before running /tasks
+scripts/nushell/check-task-prerequisites.nu
+
+# Update agent context files (CLAUDE.md, etc.)
+scripts/nushell/update-agent-context.nu claude
+```
+
+All Nushell scripts support similar flags as their Bash counterparts (e.g., `--json` where applicable) for integration into tooling.
+
+### Script Variants & `--script` Flag
+
+When running `specify init`, you can choose which script variant to download with the `--script` flag:
+
+```bash
+specify init my-project --ai claude --script sh   # POSIX (bash/zsh)
+specify init my-project --ai claude --script ps   # PowerShell
+specify init my-project --ai claude --script nu   # Nushell
+```
+
+If `--script` isn't provided, the CLI defaults to:
+- `sh` on Linux/macOS
+- `ps` on Windows
+
+The command templates under `templates/commands/` expose a `scripts:` mapping with keys `sh`, `ps`, and `nu`. The active agent runtime substitutes `{SCRIPT}` with the appropriate line based on environment or selection. Adding Nushell provides seamless parity without changing higher-level automation logic.
+
+Recommendation: Commit all three variants in long-lived repos so contributors can use their preferred shell.
+
 ## 📖 Learn more
 
 - **[Complete Spec-Driven Development Methodology](./spec-driven.md)** - Deep dive into the full process

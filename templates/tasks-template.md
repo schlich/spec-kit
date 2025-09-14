@@ -3,6 +3,8 @@
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
 
+Shell Variants: Bash (scripts/bash), PowerShell (scripts/powershell), Nushell (scripts/nushell) – use any equivalent to gather prerequisites.
+
 ## Execution Flow (main)
 ```
 1. Load plan.md from feature directory
