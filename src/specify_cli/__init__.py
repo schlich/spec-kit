@@ -421,32 +421,24 @@ def download_template_from_github(
     *,
     script_type: str = "sh",
     repo_owner: str | None = None,
-    prefer_upstream: bool = True,
     repo_name: str = "spec-kit",
     verbose: bool = True,
     show_progress: bool = True,
     client: httpx.Client = None,
     debug: bool = False,
-)-> Tuple[Path, dict]:
+) -> Tuple[Path, dict]:
     """Download template ZIP for the given assistant from a GitHub release.
 
         Owner detection (when ``repo_owner`` not explicitly provided):
-            1. Environment variable ``SPEC_KIT_REPO_OWNER`` (strong explicit override)
-            2. Git remotes: if a git repository is present
-                 * If ``prefer_upstream`` is True (default) and remote ``upstream`` exists → use its owner
-                 * Else use ``origin`` owner if available
-                 * Else fall back to whichever of upstream/origin exists
-            3. GitHub CLI: ``gh repo view --json nameWithOwner`` (falls back to authenticated context)
+            1. Environment variable ``SPEC_KIT_REPO_OWNER`` (explicit override)
+            2. Git remotes (if repo present): prefer ``upstream`` owner if remote exists, else ``origin``
+            3. GitHub CLI: ``gh repo view --json nameWithOwner``
             4. Fallback default owner: ``github``
 
-        Rationale:
-            * Fork workflows often configure both ``origin`` (fork) and ``upstream`` (canonical)
-            * Defaulting to upstream lets contributors test against a canonical release without extra flags
-            * Passing ``--no-prefer-upstream`` or setting ``prefer_upstream=False`` switches preference to origin
-            * Explicit ``--repo-owner`` or env var always wins.
+        Explicit ``--repo-owner`` argument always wins over all other detection.
 
         Metadata returned includes: repo_owner, owner_source, remote_used, remote_url,
-    detection_steps (trace), and prefer_upstream (bool).
+        detection_steps (trace).
     """
     detection_steps: list[tuple[str,str]] = []  # (source, value)
     resolved_owner_source: str | None = None
@@ -469,7 +461,7 @@ def download_template_from_github(
             resolved_owner_source = "env"
             record("env", repo_owner)
 
-    # 2. Git remotes (origin / upstream) if still not resolved or prefer_upstream requested
+    # 2. Git remotes (prefer upstream if present else origin) if still not resolved
     try:
         if shutil.which("git"):
             proc = subprocess.run([
@@ -512,30 +504,16 @@ def download_template_from_github(
                 origin_owner = extract_owner(parsed_remotes["origin"])
                 if origin_owner:
                     record("git-origin", origin_owner)
-            # Selection logic
-            chosen_owner = None
-            # Case A: prefer upstream explicitly
-            if prefer_upstream:
-                if upstream_owner:
-                    chosen_owner = upstream_owner
-                    remote_used = "upstream"
-                    remote_url = parsed_remotes.get("upstream")
-                elif origin_owner:
-                    chosen_owner = origin_owner
-                    remote_used = "origin"
-                    remote_url = parsed_remotes.get("origin")
-            else:
-                # prefer origin first when flag disabled
-                if origin_owner:
-                    chosen_owner = origin_owner
-                    remote_used = "origin"
-                    remote_url = parsed_remotes.get("origin")
-                elif upstream_owner:
-                    chosen_owner = upstream_owner
-                    remote_used = "upstream"
-                    remote_url = parsed_remotes.get("upstream")
+            # Selection logic simplified: prefer upstream if available, else origin
+            chosen_owner = upstream_owner or origin_owner
             if debug and not repo_owner:
-                console.print(f"[dim]Remote selection debug → prefer_upstream={prefer_upstream} origin={origin_owner} upstream={upstream_owner} chosen={chosen_owner}[/dim]")
+                console.print(f"[dim]Remote selection debug → upstream={upstream_owner} origin={origin_owner} chosen={chosen_owner}[/dim]")
+            if chosen_owner == upstream_owner and chosen_owner:
+                remote_used = "upstream"
+                remote_url = parsed_remotes.get("upstream")
+            elif chosen_owner == origin_owner and chosen_owner:
+                remote_used = "origin"
+                remote_url = parsed_remotes.get("origin")
             if chosen_owner and not repo_owner:
                 repo_owner = chosen_owner
                 resolved_owner_source = f"git-{remote_used}"
@@ -672,7 +650,6 @@ def download_template_from_github(
         "remote_used": remote_used,
         "remote_url": remote_url,
         "detection_steps": detection_steps,
-        "prefer_upstream": prefer_upstream,
     }
     return zip_path, metadata
 
@@ -682,7 +659,6 @@ def download_and_extract_template(
     ai_assistant: str,
     script_type: str,
     repo_owner: str | None = None,
-    prefer_upstream: bool = True,
     is_current_dir: bool = False,
     *,
     verbose: bool = True,
@@ -704,7 +680,6 @@ def download_and_extract_template(
             current_dir,
             script_type=script_type,
             repo_owner=repo_owner,
-            prefer_upstream=prefer_upstream,
             verbose=verbose and tracker is None,
             show_progress=(tracker is None),
             client=client,
@@ -905,7 +880,6 @@ def init(
     ai_assistant: str = typer.Option(None, "--ai", help="AI assistant to use: claude, gemini, copilot, or cursor"),
     script_type: str = typer.Option(None, "--script", help="Script type to use: sh, ps or nu"),
     repo_owner: str = typer.Option(None, "--repo-owner", help="Override GitHub repo owner for template releases (default auto-detect via gh or SPEC_KIT_REPO_OWNER)"),
-    prefer_upstream: bool = typer.Option(True, "--prefer-upstream/--no-prefer-upstream", help="When detecting owner from git remotes, prefer 'upstream' over 'origin' if available"),
     ignore_agent_tools: bool = typer.Option(False, "--ignore-agent-tools", help="Skip checks for AI agent tools like Claude Code"),
     no_git: bool = typer.Option(False, "--no-git", help="Skip git repository initialization"),
     here: bool = typer.Option(False, "--here", help="Initialize project in the current directory instead of creating a new one"),
@@ -1072,7 +1046,6 @@ def init(
                 selected_ai,
                 selected_script,
                 repo_owner=repo_owner,
-                prefer_upstream=prefer_upstream,
                 is_current_dir=here,
                 verbose=False,
                 tracker=tracker,
