@@ -83,17 +83,21 @@ jobs:
 
           Updated specification-driven development templates for GitHub Copilot, Claude Code, Gemini CLI, and Cursor.
 
-          Now includes per-script variants for POSIX shell (sh) and PowerShell (ps).
+          Now includes per-script variants for POSIX shell (sh), PowerShell (ps), and Nushell (nu).
 
           Download the template for your preferred AI assistant + script type:
           - spec-kit-template-copilot-sh-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-copilot-ps-${{ steps.get_tag.outputs.new_version }}.zip
+          - spec-kit-template-copilot-nu-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-claude-sh-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-claude-ps-${{ steps.get_tag.outputs.new_version }}.zip
+          - spec-kit-template-claude-nu-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-gemini-sh-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-gemini-ps-${{ steps.get_tag.outputs.new_version }}.zip
+          - spec-kit-template-gemini-nu-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-cursor-sh-${{ steps.get_tag.outputs.new_version }}.zip
           - spec-kit-template-cursor-ps-${{ steps.get_tag.outputs.new_version }}.zip
+          - spec-kit-template-cursor-nu-${{ steps.get_tag.outputs.new_version }}.zip
           EOF
           
           echo "Generated release notes:"
@@ -108,12 +112,16 @@ jobs:
           gh release create ${{ steps.get_tag.outputs.new_version }} \
             spec-kit-template-copilot-sh-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-copilot-ps-${{ steps.get_tag.outputs.new_version }}.zip \
+            spec-kit-template-copilot-nu-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-claude-sh-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-claude-ps-${{ steps.get_tag.outputs.new_version }}.zip \
+            spec-kit-template-claude-nu-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-gemini-sh-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-gemini-ps-${{ steps.get_tag.outputs.new_version }}.zip \
+            spec-kit-template-gemini-nu-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-cursor-sh-${{ steps.get_tag.outputs.new_version }}.zip \
             spec-kit-template-cursor-ps-${{ steps.get_tag.outputs.new_version }}.zip \
+            spec-kit-template-cursor-nu-${{ steps.get_tag.outputs.new_version }}.zip \
             --title "Spec Kit Templates - $VERSION_NO_V" \
             --notes-file release_notes.md
         env:

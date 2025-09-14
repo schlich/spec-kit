@@ -45,6 +45,47 @@ When working on spec-kit:
 3. Test script functionality in the `scripts/` directory
 4. Ensure memory files (`memory/constitution.md`) are updated if major process changes are made
 
+## Building release template archives (maintainers)
+
+The GitHub Action in `.github/workflows/release.yml` automatically builds and publishes template archives for every push to `main` that modifies template-relevant paths. Archives follow the naming pattern:
+
+`spec-kit-template-<ai>-<script>-<version>.zip`
+
+Where:
+- `<ai>`: `claude`, `gemini`, `copilot`, or `cursor`
+- `<script>`: `sh` (POSIX shell), `ps` (PowerShell), or `nu` (Nushell)
+
+### Local build (verification prior to release)
+
+Prerequisites: `zip` must be installed and available on PATH.
+
+Examples:
+
+```bash
+# Build all agents for all script variants (sh, ps, nu)
+bash .github/workflows/scripts/create-release-packages.sh v0.0.1
+
+# Build only copilot sh variant
+AGENTS=copilot SCRIPTS=sh bash .github/workflows/scripts/create-release-packages.sh v0.0.1
+
+# Build only gemini + copilot nu variants
+AGENTS="gemini,copilot" SCRIPTS=nu bash .github/workflows/scripts/create-release-packages.sh v0.0.1
+```
+
+Resulting archives will be created in the repository root.
+
+### Adding / updating script variants
+
+When introducing a new script variant:
+1. Add its directory under `scripts/<variant-name>`
+2. Add `- <variant-key>` lines to each command template in `templates/commands/*.md`
+3. Insert a `<!-- VARIANT:<variant-key> - ... -->` line in `templates/plan-template.md`
+4. Extend the `ALL_SCRIPTS` array and `case` statement in `create-release-packages.sh`
+5. Update release notes section in `.github/workflows/release.yml`
+6. (Optional) Update CLI `--script` option choices in `src/specify_cli/__init__.py` if end‑user selection is needed
+
+Nushell (`nu`) support has already been integrated following the above pattern.
+
 ## Resources
 
 - [Spec-Driven Development Methodology](./spec-driven.md)

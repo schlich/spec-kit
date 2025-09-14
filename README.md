@@ -191,6 +191,24 @@ scripts/nushell/update-agent-context.nu claude
 
 All Nushell scripts support similar flags as their Bash counterparts (e.g., `--json` where applicable) for integration into tooling.
 
+### Script Variants & `--script` Flag
+
+When running `specify init`, you can choose which script variant to download with the `--script` flag:
+
+```bash
+specify init my-project --ai claude --script sh   # POSIX (bash/zsh)
+specify init my-project --ai claude --script ps   # PowerShell
+specify init my-project --ai claude --script nu   # Nushell
+```
+
+If `--script` isn't provided, the CLI defaults to:
+- `sh` on Linux/macOS
+- `ps` on Windows
+
+The command templates under `templates/commands/` expose a `scripts:` mapping with keys `sh`, `ps`, and `nu`. The active agent runtime substitutes `{SCRIPT}` with the appropriate line based on environment or selection. Adding Nushell provides seamless parity without changing higher-level automation logic.
+
+Recommendation: Commit all three variants in long-lived repos so contributors can use their preferred shell.
+
 ## 📖 Learn more
 
 - **[Complete Spec-Driven Development Methodology](./spec-driven.md)** - Deep dive into the full process
