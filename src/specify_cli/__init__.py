@@ -514,18 +514,28 @@ def download_template_from_github(
                     record("git-origin", origin_owner)
             # Selection logic
             chosen_owner = None
-            if prefer_upstream and upstream_owner:
-                chosen_owner = upstream_owner
-                remote_used = "upstream"
-                remote_url = parsed_remotes.get("upstream")
-            elif origin_owner:
-                chosen_owner = origin_owner
-                remote_used = "origin"
-                remote_url = parsed_remotes.get("origin")
-            elif upstream_owner:  # fallback if prefer_upstream False but origin missing
-                chosen_owner = upstream_owner
-                remote_used = "upstream"
-                remote_url = parsed_remotes.get("upstream")
+            # Case A: prefer upstream explicitly
+            if prefer_upstream:
+                if upstream_owner:
+                    chosen_owner = upstream_owner
+                    remote_used = "upstream"
+                    remote_url = parsed_remotes.get("upstream")
+                elif origin_owner:
+                    chosen_owner = origin_owner
+                    remote_used = "origin"
+                    remote_url = parsed_remotes.get("origin")
+            else:
+                # prefer origin first when flag disabled
+                if origin_owner:
+                    chosen_owner = origin_owner
+                    remote_used = "origin"
+                    remote_url = parsed_remotes.get("origin")
+                elif upstream_owner:
+                    chosen_owner = upstream_owner
+                    remote_used = "upstream"
+                    remote_url = parsed_remotes.get("upstream")
+            if debug and not repo_owner:
+                console.print(f"[dim]Remote selection debug → prefer_upstream={prefer_upstream} origin={origin_owner} upstream={upstream_owner} chosen={chosen_owner}[/dim]")
             if chosen_owner and not repo_owner:
                 repo_owner = chosen_owner
                 resolved_owner_source = f"git-{remote_used}"
