@@ -13,6 +13,13 @@ Auto-generated from all feature plans. Last updated: [DATE]
 ## Commands
 [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES]
 
+Shell Script Variants:
+- Bash: scripts/bash/*.sh
+- PowerShell: scripts/powershell/*.ps1
+- Nushell: scripts/nushell/*.nu
+
+Use the matching variant for your environment; behavior is equivalent across shells.
+
 ## Code Style
 [LANGUAGE-SPECIFIC, ONLY FOR LANGUAGES IN USE]
 

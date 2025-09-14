@@ -3,6 +3,7 @@ description: Execute the implementation planning workflow using the plan templat
 scripts:
   sh: scripts/bash/setup-plan.sh --json
   ps: scripts/powershell/setup-plan.ps1 -Json
+   nu: scripts/nushell/setup-plan.nu --json
 ---
 
 Given the implementation details provided as an argument, do this:

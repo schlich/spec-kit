@@ -3,6 +3,7 @@ description: Generate an actionable, dependency-ordered tasks.md for the feature
 scripts:
   sh: scripts/bash/check-task-prerequisites.sh --json
   ps: scripts/powershell/check-task-prerequisites.ps1 -Json
+   nu: scripts/nushell/check-task-prerequisites.nu --json
 ---
 
 Given the context provided as an argument, do this:

@@ -5,6 +5,8 @@
 **Status**: Draft  
 **Input**: User description: "$ARGUMENTS"
 
+_Note: Subsequent planning and task generation scripts are available in Bash, PowerShell, and Nushell under `scripts/`._
+
 ## Execution Flow (main)
 ```
 1. Parse user description from Input

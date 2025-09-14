@@ -168,6 +168,29 @@ Our research and experimentation focus on:
 - [Python 3.11+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/downloads)
 
+### Optional Shell Environments
+
+In addition to the provided Bash (`scripts/bash`) and PowerShell (`scripts/powershell`) automation scripts, this repository now includes Nushell equivalents in `scripts/nushell`. If you use [Nushell](https://www.nushell.sh/), you can run the same feature workflow commands:
+
+```bash
+# Create a new feature (generates numbered branch & spec skeleton)
+scripts/nushell/create-new-feature.nu "Add photo album sharing"
+
+# Set up implementation plan template
+scripts/nushell/setup-plan.nu
+
+# Show derived feature paths
+scripts/nushell/get-feature-paths.nu
+
+# Validate prerequisites before running /tasks
+scripts/nushell/check-task-prerequisites.nu
+
+# Update agent context files (CLAUDE.md, etc.)
+scripts/nushell/update-agent-context.nu claude
+```
+
+All Nushell scripts support similar flags as their Bash counterparts (e.g., `--json` where applicable) for integration into tooling.
+
 ## 📖 Learn more
 
 - **[Complete Spec-Driven Development Methodology](./spec-driven.md)** - Deep dive into the full process
